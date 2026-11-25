@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SiteSettings {
+  id                  String   @id @default("main")
+  brandName           String   @default("Velo99 Bulksales")
+  tagline             String   @default("Malaysia Online Bicycle Wholesale Platform")
+  logoText            String   @default("V99")
+  supportPhone        String   @default("+6011-1600-0099")
+  supportEmail        String   @default("bulksales@velo99.my")
+  supportHours        String   @default("09:00 AM - 05:00 PM (Mon-Sat)")
+  companyRegNo        String   @default("Velo99 Wholesale Sdn Bhd 202401016930 (1562780-X)")
+  footerNotice        String   @default("Online bulk service covers Central, Southern, Northern, and East Coast South regions in Peninsular Malaysia.")
+  minOrderValue       Float    @default(500)
+  freeDeliveryCbm     Float    @default(0.5)
+  standardShippingFee Float    @default(80)
+  rescheduleFee       Float    @default(30)
+  cutoffHour          Int      @default(13)
+  instalmentPromoText String   @default("Manual Bank Transfer, DuitNow QR & Approved Dealer Credit Terms")
+  bankName            String   @default("Maybank Islamic")
+  bankAccountName     String   @default("Velo99 Wholesale Sdn Bhd")
+  bankAccountNumber   String   @default("5123 4567 8901")
+  duitNowQrUrl        String   @default("")
+  whatsappOrderNumber String   @default("601116000099")
+  notifyEmail         String   @default("bulksales@velo99.my")
+  updatedAt           DateTime @updatedAt
+}
+
+model UploadedAsset {
+  id        String   @id @default(cuid())
+  filename  String
+  mimeType  String
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
+model HeroBanner {
+  id        String   @id @default(cuid())
+  eyebrow   String
+  title     String
+  subtitle  String
+  ctaLabel  String   @default("Shop Bulk Cartons")
+  ctaHref   String   @default("#catalog")
+  imageUrl  String
+  badgeText String   @default("1:00 PM DAILY CUTOFF")
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model FaqItem {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+}
+
+model DeliveryRegion {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  name           String
+  states         String
+  hubName        String
+  hubAddress     String
+  postcodePrefix String
+  pickupHours    String   @default("6:00 PM - 10:00 PM")
+  active         Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  orders         Order[]
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  description String    @default("")
+  imageUrl    String    @default("/images/bike-mtb.jpg")
+  sortOrder   Int       @default(0)
+  active      Boolean   @default(true)
+  products    Product[]
+}
+
+model Product {
+  id             String          @id @default(cuid())
+  sku            String          @unique
+  name           String
+  categoryId     String
+  category       Category        @relation(fields: [categoryId], references: [id])
+  color          String
+  size           String
+  unitsPerCarton Int             @default(2)
+  isBicycle      Boolean         @default(true)
+  cbm            Float           @default(0.32)
+  unitPrice      Float
+  costPrice      Float
+  stock          Int             @default(0)
+  minStock       Int             @default(8)
+  isNew          Boolean         @default(false)
+  active         Boolean         @default(true)
+  imageUrl       String          @default("/images/bike-mtb.jpg")
+  specs          String          @default("")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  orderItems     OrderItem[]
+  purchaseOrders PurchaseOrder[]
+  inventoryLogs  InventoryLog[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  phone        String   @default("")
+  passwordHash String
+  name         String
+  companyName  String   @default("")
+  role         String   @default("dealer") // admin | sales | dealer
+  tier         String   @default("standard") // platinum | gold | silver | standard
+  creditLimit  Float    @default(12000)
+  creditUsed   Float    @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  orders       Order[]
+}
+
+model Order {
+  id              String          @id @default(cuid())
+  orderNumber     String          @unique
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id])
+  customerName    String
+  customerPhone   String
+  customerEmail   String          @default("")
+  dealerTier      String          @default("standard")
+  regionId        String?
+  region          DeliveryRegion? @relation(fields: [regionId], references: [id])
+  regionName      String
+  hubName         String
+  deliveryAddress String          @default("")
+  postcode        String
+  fulfillment     String          @default("delivery") // delivery | pickup
+  paymentMethod   String          @default("fpx") // fpx | card | instalment_3m
+  requestEInvoice Boolean         @default(false)
+  eInvoiceCompany String          @default("")
+  eInvoiceTin     String          @default("")
+  totalBikes      Int             @default(0)
+  totalCartons    Int             @default(0)
+  totalCbm        Float           @default(0)
+  discountRate    Float           @default(0)
+  subtotal        Float           @default(0)
+  discountAmount  Float           @default(0)
+  goodsRevenue    Float           @default(0)
+  shippingFee     Float           @default(0)
+  totalAmount     Float           @default(0)
+  totalCost       Float           @default(0)
+  netProfit       Float           @default(0)
+  profitMargin    Float           @default(0)
+  status          String          @default("CONFIRMED")
+  notes           String          @default("")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  items           OrderItem[]
+}
+
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id])
+  sku            String
+  productName    String
+  qty            Int
+  unitsPerCarton Int
+  cbm            Float
+  unitPrice      Float
+  costPrice      Float
+}
+
+model PurchaseOrder {
+  id          String    @id @default(cuid())
+  poNumber    String    @unique
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  sku         String
+  productName String
+  qty         Int
+  unitCost    Float
+  supplier    String
+  status      String    @default("pending") // pending | received
+  createdAt   DateTime  @default(now())
+  receivedAt  DateTime?
+}
+
+model InventoryLog {
+  id           String   @id @default(cuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id])
+  sku          String
+  type         String   // INBOUND | OUTBOUND | ADJUSTMENT
+  delta        Int
+  balanceAfter Int
+  reference    String
+  note         String   @default("")
+  createdAt    DateTime @default(now())
+}
