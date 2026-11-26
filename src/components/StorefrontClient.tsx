@@ -147,7 +147,12 @@ export function StorefrontClient({
   const [slideIdx, setSlideIdx] = useState(0);
   const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [newOnly, setNewOnly] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<
+    'featured' | 'price_asc' | 'price_desc' | 'cbm_desc' | 'stock_desc'
+  >('featured');
 
   // Location & checkout
   const [selectedRegionId, setSelectedRegionId] = useState<string>(regions[0]?.id || '');
@@ -260,17 +265,37 @@ export function StorefrontClient({
     });
   }, [cartLines, activeTierId, fulfillment, settings, isAdmin, adminCustomDiscountPct]);
 
+  const instantSearchResults = useMemo(() => {
+    const tokens = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return [];
+    return products
+      .filter((p) => {
+        const hay = `${p.name} ${p.sku} ${p.category.name} ${p.color} ${p.size} ${p.specs}`.toLowerCase();
+        return tokens.every((tok) => hay.includes(tok));
+      })
+      .slice(0, 6);
+  }, [products, searchQuery]);
+
   const filteredProducts = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return products.filter((p) => {
+    const tokens = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const list = products.filter((p) => {
       if (activeCategoryId !== 'all' && p.categoryId !== activeCategoryId) return false;
       if (newOnly && !p.isNew) return false;
-      if (q && !`${p.name} ${p.sku} ${p.color} ${p.size} ${p.specs}`.toLowerCase().includes(q)) {
-        return false;
+      if (inStockOnly && p.stock <= 0) return false;
+      if (tokens.length > 0) {
+        const hay = `${p.name} ${p.sku} ${p.category.name} ${p.color} ${p.size} ${p.specs}`.toLowerCase();
+        if (!tokens.every((tok) => hay.includes(tok))) return false;
       }
       return true;
     });
-  }, [products, activeCategoryId, newOnly, searchQuery]);
+
+    const sorted = [...list];
+    if (sortBy === 'price_asc') sorted.sort((a, b) => a.unitPrice - b.unitPrice);
+    else if (sortBy === 'price_desc') sorted.sort((a, b) => b.unitPrice - a.unitPrice);
+    else if (sortBy === 'cbm_desc') sorted.sort((a, b) => b.cbm - a.cbm);
+    else if (sortBy === 'stock_desc') sorted.sort((a, b) => b.stock - a.stock);
+    return sorted;
+  }, [products, activeCategoryId, newOnly, inStockOnly, searchQuery, sortBy]);
 
   const newArrivals = useMemo(() => products.filter((p) => p.isNew).slice(0, 6), [products]);
   const criticalCount = useMemo(
@@ -609,6 +634,127 @@ export function StorefrontClient({
           </div>
         </div>
 
+        {/* Prominent Global Product Search Bar (99bulksales.my style + live instant results) */}
+        <div className="header-search-bar">
+          <div className="header-search-inner">
+            <form
+              className="header-search-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setSearchFocused(false);
+                setActiveCategoryId('all');
+                document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              <span aria-hidden="true" style={{ color: 'var(--ink-muted)', fontSize: '0.95rem' }}>
+                &#128269;
+              </span>
+              <input
+                type="search"
+                className="header-search-input"
+                aria-label="Search bicycles, models, wheel sizes, parts, or SKUs"
+                placeholder='Search bicycles, wheel sizes, parts, or SKU (e.g. "29 MTB", "folding", "helmet", "V99-RD700")...'
+                value={searchQuery}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 180)}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="search-clear-btn"
+                  aria-label="Clear search"
+                  onClick={() => setSearchQuery('')}
+                >
+                  &times;
+                </button>
+              )}
+              <button type="submit" className="btn btn-primary btn-sm">
+                Search
+              </button>
+            </form>
+
+            {searchFocused && searchQuery.trim().length > 0 && (
+              <div className="search-dropdown" role="listbox">
+                {instantSearchResults.length === 0 ? (
+                  <div style={{ padding: '14px 16px', fontSize: '0.84rem', color: 'var(--ink-muted)' }}>
+                    No matching cartons found for &ldquo;<strong>{searchQuery}</strong>&rdquo;. Try searching by model, wheel size, or SKU.
+                  </div>
+                ) : (
+                  <>
+                    {instantSearchResults.map((p) => {
+                      const st = getStockStatus(p.stock, p.minStock);
+                      return (
+                        <div key={p.id} className="search-result-row">
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            style={{ width: 54, height: 42, objectFit: 'cover', borderRadius: 7, cursor: 'pointer' }}
+                            onMouseDown={() => {
+                              setSearchFocused(false);
+                              setInspectProduct(p);
+                            }}
+                          />
+                          <div
+                            style={{ minWidth: 0, cursor: 'pointer' }}
+                            onMouseDown={() => {
+                              setSearchFocused(false);
+                              setInspectProduct(p);
+                            }}
+                          >
+                            <div style={{ fontSize: '0.84rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {p.name}
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--ink-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <span className="mono">{p.sku}</span>
+                              <span>&bull; {p.cbm.toFixed(2)} m&sup3;</span>
+                              <span className={`stock-pill ${st}`} style={{ padding: '1px 7px' }}>
+                                {st} ({p.stock})
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <strong className="mono" style={{ fontSize: '0.88rem' }}>
+                              {formatRM(p.unitPrice)}
+                            </strong>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={p.stock === 0}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                addToCart(p, 1);
+                              }}
+                            >
+                              {p.stock === 0 ? 'Out' : '+ Add'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div style={{ padding: '9px 14px', background: 'var(--bg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                      <span style={{ color: 'var(--ink-muted)' }}>
+                        Showing {instantSearchResults.length} of {filteredProducts.length} matching carton(s)
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onMouseDown={() => {
+                          setSearchFocused(false);
+                          setActiveCategoryId('all');
+                          document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                      >
+                        View all in Catalog &darr;
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* 99bulksales.my Signature Location + Dual Threshold Progress Bar */}
         <div className="threshold-strip">
           <div className="threshold-grid">
@@ -905,23 +1051,126 @@ export function StorefrontClient({
                 >
                   <input
                     type="checkbox"
+                    checked={inStockOnly}
+                    onChange={(e) => setInStockOnly(e.target.checked)}
+                  />
+                  In stock only
+                </label>
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
                     checked={newOnly}
                     onChange={(e) => setNewOnly(e.target.checked)}
                   />
                   New only
                 </label>
+                <select
+                  className="field-select"
+                  aria-label="Sort wholesale catalog"
+                  style={{ width: 190 }}
+                  value={sortBy}
+                  onChange={(e) =>
+                    setSortBy(
+                      e.target.value as
+                        | 'featured'
+                        | 'price_asc'
+                        | 'price_desc'
+                        | 'cbm_desc'
+                        | 'stock_desc'
+                    )
+                  }
+                >
+                  <option value="featured">Sort: Featured</option>
+                  <option value="price_asc">Price: Low to High</option>
+                  <option value="price_desc">Price: High to Low</option>
+                  <option value="cbm_desc">Volume (CBM): High to Low</option>
+                  <option value="stock_desc">Stock: High to Low</option>
+                </select>
                 <input
                   type="search"
                   className="field-input"
-                  style={{ width: 280 }}
-                  placeholder="Search model, wheel size, color, or SKU..."
+                  style={{ width: 250 }}
+                  placeholder="Filter by model, size, or SKU..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
             </div>
 
+            {(searchQuery.trim() || activeCategoryId !== 'all' || newOnly || inStockOnly) && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                  marginBottom: 14,
+                  padding: '9px 13px',
+                  borderRadius: 10,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  fontSize: '0.82rem',
+                }}
+              >
+                <span>
+                  Showing <strong className="mono">{filteredProducts.length}</strong> wholesale
+                  carton(s)
+                  {searchQuery.trim() ? (
+                    <>
+                      {' '}
+                      matching &ldquo;<strong>{searchQuery.trim()}</strong>&rdquo;
+                    </>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setActiveCategoryId('all');
+                    setNewOnly(false);
+                    setInStockOnly(false);
+                    setSortBy('featured');
+                  }}
+                >
+                  Clear All Filters
+                </button>
+              </div>
+            )}
+
             <div className="product-grid">
+              {filteredProducts.length === 0 ? (
+                <div className="card" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '36px 20px' }}>
+                  <p style={{ margin: '0 0 8px', fontWeight: 800, fontSize: '1rem' }}>
+                    No wholesale cartons match your search
+                  </p>
+                  <p style={{ margin: '0 0 14px', fontSize: '0.86rem', color: 'var(--ink-muted)' }}>
+                    Try a shorter keyword (e.g. &ldquo;MTB&rdquo;, &ldquo;20&rdquo;, &ldquo;Road&rdquo;, &ldquo;Helmet&rdquo;) or reset your filters.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setActiveCategoryId('all');
+                      setNewOnly(false);
+                      setInStockOnly(false);
+                    }}
+                  >
+                    Reset Search &amp; Show All Cartons
+                  </button>
+                </div>
+              ) : null}
               {filteredProducts.map((p) => {
                 const status = getStockStatus(p.stock, p.minStock);
                 const netPrice = Number((p.unitPrice * (1 - activeTier.discountRate)).toFixed(2));

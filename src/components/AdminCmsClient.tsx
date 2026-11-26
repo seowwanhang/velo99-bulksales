@@ -54,6 +54,13 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
   const [restockProduct, setRestockProduct] = useState<any | null>(null);
   const [restockForm, setRestockForm] = useState({ qty: 10, supplier: 'Taichung Alloy Works Ltd.' });
   const [uploading, setUploading] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [productCatFilter, setProductCatFilter] = useState('all');
+  const [productStockFilter, setProductStockFilter] = useState('all');
+  const [editingPo, setEditingPo] = useState<any | null>(null);
+  const [adjustModal, setAdjustModal] = useState<any | null>(null);
+  const [logSearch, setLogSearch] = useState('');
+  const [logTypeFilter, setLogTypeFilter] = useState('all');
 
   const toast = useCallback((msg: string, kind: 'info' | 'success' | 'error' = 'info') => {
     const id = Date.now() + Math.random();
@@ -236,6 +243,75 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
     }
   }
 
+  async function savePo(e: React.FormEvent) {
+    e.preventDefault();
+    const isNew = !editingPo.id;
+    const res = await fetch('/api/admin/purchase-orders', {
+      method: isNew ? 'POST' : 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editingPo),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast(data.error || 'Failed to save Purchase Order.', 'error');
+      return;
+    }
+    setEditingPo(null);
+    toast(isNew ? 'Purchase Order created!' : 'Purchase Order updated!', 'success');
+    loadAll();
+  }
+
+  async function deletePo(id: string) {
+    if (!confirm('Delete this Purchase Order record?')) return;
+    const res = await fetch(`/api/admin/purchase-orders?id=${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      toast('Purchase Order deleted.', 'info');
+      loadAll();
+    } else {
+      toast('Failed to delete Purchase Order.', 'error');
+    }
+  }
+
+  async function saveStockAdjustment(e: React.FormEvent) {
+    e.preventDefault();
+    const res = await fetch('/api/admin/inventory-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(adjustModal),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast(data.error || 'Stock adjustment failed.', 'error');
+      return;
+    }
+    setAdjustModal(null);
+    toast(`Stock updated (new balance: ${data.balanceAfter} ctn) & logged!`, 'success');
+    loadAll();
+  }
+
+  async function deleteLog(id: string) {
+    if (!confirm('Delete this log entry? (Current product stock will not change.)')) return;
+    const res = await fetch(`/api/admin/inventory-logs?id=${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      toast('Log entry deleted.', 'info');
+      loadAll();
+    }
+  }
+
+  async function clearAllLogs() {
+    if (
+      !confirm(
+        'Clear ALL inventory log entries? (This only clears log history; your current product stock levels remain untouched.)'
+      )
+    )
+      return;
+    const res = await fetch('/api/admin/inventory-logs?clearAll=true', { method: 'DELETE' });
+    if (res.ok) {
+      toast('All inventory logs cleared.', 'info');
+      loadAll();
+    }
+  }
+
   async function updateOrderStatus(id: string, status: string) {
     const res = await fetch(`/api/orders/${id}`, {
       method: 'PATCH',
@@ -337,7 +413,7 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
       <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 20 }}>
         <div className="card" style={{ width: 'min(430px, 100%)', padding: 28 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <strong style={{ fontSize: '1.15rem' }}>Velo99 Admin CMS Login</strong>
+            <strong style={{ fontSize: '1.15rem' }}>Admin CMS Login</strong>
             <Link href="/" className="btn btn-secondary btn-sm">
               &larr; Storefront
             </Link>
@@ -652,6 +728,66 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                 </div>
               </div>
 
+              {/* Live Product Search & Filter Bar */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  background: 'var(--surface)',
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <input
+                  type="search"
+                  className="field-input"
+                  style={{ flex: '1 1 240px' }}
+                  placeholder="Search SKU, model name, color, size, or specs..."
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                />
+                <select
+                  className="field-select"
+                  style={{ width: 190 }}
+                  value={productCatFilter}
+                  onChange={(e) => setProductCatFilter(e.target.value)}
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="field-select"
+                  style={{ width: 170 }}
+                  value={productStockFilter}
+                  onChange={(e) => setProductStockFilter(e.target.value)}
+                >
+                  <option value="all">All Stock Levels</option>
+                  <option value="CRITICAL">CRITICAL Only</option>
+                  <option value="WARNING">WARNING Only</option>
+                  <option value="HEALTHY">HEALTHY Only</option>
+                </select>
+                {(productSearch || productCatFilter !== 'all' || productStockFilter !== 'all') && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setProductSearch('');
+                      setProductCatFilter('all');
+                      setProductStockFilter('all');
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
               <div className="table-wrap">
                 <table className="data-table">
                   <thead>
@@ -667,7 +803,20 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((p) => {
+                    {products
+                      .filter((p) => {
+                        if (productCatFilter !== 'all' && p.categoryId !== productCatFilter)
+                          return false;
+                        const st = getStockStatus(p.stock, p.minStock);
+                        if (productStockFilter !== 'all' && st !== productStockFilter) return false;
+                        const tokens = productSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+                        if (tokens.length > 0) {
+                          const hay = `${p.sku} ${p.name} ${p.color} ${p.size} ${p.specs} ${p.category?.name || ''}`.toLowerCase();
+                          if (!tokens.every((t) => hay.includes(t))) return false;
+                        }
+                        return true;
+                      })
+                      .map((p) => {
                       const st = getStockStatus(p.stock, p.minStock);
                       return (
                         <tr key={p.id} style={{ opacity: p.active ? 1 : 0.55 }}>
@@ -931,9 +1080,32 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
 
           {/* ========== TAB 5: RESTOCK POS & INVENTORY LOGS ========== */}
           {tab === 'restock' && (
-            <div style={{ display: 'grid', gap: 20 }}>
+            <div style={{ display: 'grid', gap: 22 }}>
               <div>
-                <h1 style={{ margin: '0 0 12px', fontSize: '1.4rem' }}>Purchase Orders (Inbound Restock)</h1>
+                <div className="section-head" style={{ marginBottom: 12 }}>
+                  <div>
+                    <h1 style={{ margin: 0, fontSize: '1.4rem' }}>Purchase Orders (Inbound Restock)</h1>
+                    <p>Create, edit, delete, or receive factory restock purchase orders.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      const firstProd = products[0];
+                      setEditingPo({
+                        productId: firstProd?.id || '',
+                        qty: firstProd
+                          ? getSuggestedReorderQty(firstProd.stock, firstProd.minStock)
+                          : 10,
+                        unitCost: firstProd?.costPrice ?? 1000,
+                        supplier: 'Taichung Alloy Works Ltd.',
+                        status: 'pending',
+                      });
+                    }}
+                  >
+                    + New Purchase Order
+                  </button>
+                </div>
                 <div className="table-wrap">
                   <table className="data-table">
                     <thead>
@@ -944,57 +1116,142 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                         <th>Qty</th>
                         <th>Total Cost</th>
                         <th>Status</th>
-                        <th>Action</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {pos.map((po) => (
-                        <tr key={po.id}>
-                          <td className="mono">
-                            <strong>{po.poNumber}</strong>
-                          </td>
-                          <td>
-                            <span className="mono">{po.sku}</span>
-                            <div style={{ fontSize: '0.8rem' }}>{po.productName}</div>
-                          </td>
-                          <td>{po.supplier}</td>
-                          <td className="mono">
-                            <strong>+{po.qty}</strong>
-                          </td>
-                          <td className="mono">{formatRM(po.qty * po.unitCost)}</td>
-                          <td>
-                            <span
-                              className={`stock-pill ${po.status === 'received' ? 'HEALTHY' : 'WARNING'}`}
-                            >
-                              {po.status.toUpperCase()}
-                            </span>
-                          </td>
-                          <td>
-                            {po.status === 'pending' ? (
-                              <button
-                                type="button"
-                                className="btn btn-success btn-sm"
-                                onClick={() => receivePo(po.id)}
-                              >
-                                Mark Received (+Stock)
-                              </button>
-                            ) : (
-                              <span style={{ fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
-                                Stocked In
-                              </span>
-                            )}
+                      {pos.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', color: 'var(--ink-muted)' }}>
+                            No purchase orders yet. Click &ldquo;+ New Purchase Order&rdquo; to create one.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        pos.map((po) => (
+                          <tr key={po.id}>
+                            <td className="mono">
+                              <strong>{po.poNumber}</strong>
+                            </td>
+                            <td>
+                              <span className="mono">{po.sku}</span>
+                              <div style={{ fontSize: '0.8rem' }}>{po.productName}</div>
+                            </td>
+                            <td>{po.supplier}</td>
+                            <td className="mono">
+                              <strong>+{po.qty}</strong>
+                            </td>
+                            <td className="mono">{formatRM(po.qty * po.unitCost)}</td>
+                            <td>
+                              <span
+                                className={`stock-pill ${po.status === 'received' ? 'HEALTHY' : 'WARNING'}`}
+                              >
+                                {po.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {po.status === 'pending' && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-success btn-sm"
+                                    onClick={() => receivePo(po.id)}
+                                  >
+                                    Mark Received (+Stock)
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => setEditingPo({ ...po })}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-danger btn-sm"
+                                  onClick={() => deletePo(po.id)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
               <div>
-                <h2 style={{ margin: '0 0 10px', fontSize: '1.15rem' }}>
-                  Inventory Movement Ledger (INBOUND / OUTBOUND / ADJUSTMENT)
-                </h2>
+                <div className="section-head" style={{ marginBottom: 10 }}>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '1.18rem' }}>
+                      Inventory Movement Ledger (INBOUND / OUTBOUND / ADJUSTMENT)
+                    </h2>
+                    <p>Record manual stocktakes/adjustments or clean up sample log history.</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-accent btn-sm"
+                      onClick={() =>
+                        setAdjustModal({
+                          productId: products[0]?.id || '',
+                          type: 'ADJUSTMENT',
+                          delta: 1,
+                          reference: 'STOCKTAKE',
+                          note: '',
+                        })
+                      }
+                    >
+                      + Manual Stock Adjustment
+                    </button>
+                    {logs.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        onClick={clearAllLogs}
+                      >
+                        Clear All Logs
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    marginBottom: 10,
+                    background: 'var(--surface)',
+                    padding: '9px 12px',
+                    borderRadius: 10,
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <input
+                    type="search"
+                    className="field-input"
+                    style={{ flex: '1 1 220px' }}
+                    placeholder="Filter logs by SKU, reference, or note..."
+                    value={logSearch}
+                    onChange={(e) => setLogSearch(e.target.value)}
+                  />
+                  <select
+                    className="field-select"
+                    style={{ width: 170 }}
+                    value={logTypeFilter}
+                    onChange={(e) => setLogTypeFilter(e.target.value)}
+                  >
+                    <option value="all">All Movement Types</option>
+                    <option value="INBOUND">INBOUND Only</option>
+                    <option value="OUTBOUND">OUTBOUND Only</option>
+                    <option value="ADJUSTMENT">ADJUSTMENT Only</option>
+                  </select>
+                </div>
+
                 <div className="table-wrap">
                   <table className="data-table">
                     <thead>
@@ -1006,30 +1263,57 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                         <th>Balance</th>
                         <th>Ref</th>
                         <th>Note</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {logs.map((l) => (
-                        <tr key={l.id}>
-                          <td className="mono" style={{ fontSize: '0.75rem' }}>
-                            {new Date(l.createdAt).toLocaleString('en-MY')}
+                      {logs
+                        .filter((l) => {
+                          if (logTypeFilter !== 'all' && l.type !== logTypeFilter) return false;
+                          const q = logSearch.trim().toLowerCase();
+                          if (q && !`${l.sku} ${l.reference} ${l.note}`.toLowerCase().includes(q))
+                            return false;
+                          return true;
+                        })
+                        .map((l) => (
+                          <tr key={l.id}>
+                            <td className="mono" style={{ fontSize: '0.75rem' }}>
+                              {new Date(l.createdAt).toLocaleString('en-MY')}
+                            </td>
+                            <td>
+                              <span
+                                className={`stock-pill ${l.type === 'INBOUND' ? 'HEALTHY' : l.type === 'OUTBOUND' ? 'CRITICAL' : 'WARNING'}`}
+                              >
+                                {l.type}
+                              </span>
+                            </td>
+                            <td className="mono">{l.sku}</td>
+                            <td className="mono" style={{ fontWeight: 800 }}>
+                              {l.delta > 0 ? `+${l.delta}` : l.delta}
+                            </td>
+                            <td className="mono">{l.balanceAfter} ctn</td>
+                            <td className="mono">{l.reference}</td>
+                            <td style={{ fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
+                              {l.note}
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={() => deleteLog(l.id)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      {logs.length === 0 && (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', color: 'var(--ink-muted)' }}>
+                            No inventory logs recorded yet.
                           </td>
-                          <td>
-                            <span
-                              className={`stock-pill ${l.type === 'INBOUND' ? 'HEALTHY' : l.type === 'OUTBOUND' ? 'CRITICAL' : 'WARNING'}`}
-                            >
-                              {l.type}
-                            </span>
-                          </td>
-                          <td className="mono">{l.sku}</td>
-                          <td className="mono" style={{ fontWeight: 800 }}>
-                            {l.delta > 0 ? `+${l.delta}` : l.delta}
-                          </td>
-                          <td className="mono">{l.balanceAfter} ctn</td>
-                          <td className="mono">{l.reference}</td>
-                          <td style={{ fontSize: '0.78rem', color: 'var(--ink-muted)' }}>{l.note}</td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2349,6 +2633,186 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
               </label>
               <button type="submit" className="btn btn-primary">
                 Save Account
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== CREATE / EDIT PURCHASE ORDER MODAL ==================== */}
+      {editingPo && (
+        <div className="backdrop" onClick={() => setEditingPo(null)}>
+          <div className="modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="panel-head">
+              <h3 style={{ margin: 0 }}>
+                {editingPo.id ? `Edit PO: ${editingPo.poNumber}` : 'Create New Purchase Order'}
+              </h3>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setEditingPo(null)}
+              >
+                &times;
+              </button>
+            </div>
+            <form className="panel-body" onSubmit={savePo} style={{ display: 'grid', gap: 12 }}>
+              <div className="field-group">
+                <label className="field-label">Product SKU *</label>
+                <select
+                  className="field-select"
+                  disabled={editingPo.status === 'received'}
+                  value={editingPo.productId}
+                  onChange={(e) => {
+                    const p = products.find((x) => x.id === e.target.value);
+                    setEditingPo({
+                      ...editingPo,
+                      productId: e.target.value,
+                      ...(p
+                        ? {
+                            unitCost: p.costPrice,
+                            qty: editingPo.id
+                              ? editingPo.qty
+                              : getSuggestedReorderQty(p.stock, p.minStock),
+                          }
+                        : {}),
+                    });
+                  }}
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.sku} — {p.name} (Stock: {p.stock})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="field-group">
+                  <label className="field-label">
+                    Quantity (Cartons){editingPo.status === 'received' ? ' (Locked)' : ''}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    disabled={editingPo.status === 'received'}
+                    className="field-input mono"
+                    value={editingPo.qty}
+                    onChange={(e) => setEditingPo({ ...editingPo, qty: Number(e.target.value) })}
+                  />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Unit Cost / Carton (RM)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    className="field-input mono"
+                    value={editingPo.unitCost}
+                    onChange={(e) =>
+                      setEditingPo({ ...editingPo, unitCost: Number(e.target.value) })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Supplier Name *</label>
+                <input
+                  required
+                  className="field-input"
+                  value={editingPo.supplier}
+                  onChange={(e) => setEditingPo({ ...editingPo, supplier: e.target.value })}
+                />
+              </div>
+              <div style={{ fontSize: '0.84rem' }}>
+                Estimated PO Total:{' '}
+                <strong className="mono">{formatRM(editingPo.qty * editingPo.unitCost)}</strong>
+              </div>
+              <button type="submit" className="btn btn-primary">
+                {editingPo.id ? 'Save Purchase Order Changes' : 'Create Pending Purchase Order'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MANUAL STOCK ADJUSTMENT MODAL ==================== */}
+      {adjustModal && (
+        <div className="backdrop" onClick={() => setAdjustModal(null)}>
+          <div className="modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="panel-head">
+              <h3 style={{ margin: 0 }}>Manual Stock Adjustment</h3>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setAdjustModal(null)}
+              >
+                &times;
+              </button>
+            </div>
+            <form
+              className="panel-body"
+              onSubmit={saveStockAdjustment}
+              style={{ display: 'grid', gap: 12 }}
+            >
+              <div className="field-group">
+                <label className="field-label">Select Product SKU *</label>
+                <select
+                  className="field-select"
+                  value={adjustModal.productId}
+                  onChange={(e) => setAdjustModal({ ...adjustModal, productId: e.target.value })}
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.sku} — {p.name} (Current: {p.stock} ctn)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="field-group">
+                  <label className="field-label">Movement Type</label>
+                  <select
+                    className="field-select"
+                    value={adjustModal.type}
+                    onChange={(e) => setAdjustModal({ ...adjustModal, type: e.target.value })}
+                  >
+                    <option value="INBOUND">INBOUND (+ Add Stock)</option>
+                    <option value="OUTBOUND">OUTBOUND (− Deduct Stock)</option>
+                    <option value="ADJUSTMENT">ADJUSTMENT (+ / − Signed)</option>
+                  </select>
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Cartons Delta (e.g. 5 or -2)</label>
+                  <input
+                    type="number"
+                    required
+                    className="field-input mono"
+                    value={adjustModal.delta}
+                    onChange={(e) =>
+                      setAdjustModal({ ...adjustModal, delta: Number(e.target.value) })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Reference Code</label>
+                <input
+                  className="field-input mono"
+                  value={adjustModal.reference}
+                  onChange={(e) => setAdjustModal({ ...adjustModal, reference: e.target.value })}
+                  placeholder="STOCKTAKE-NOV"
+                />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Reason / Audit Note</label>
+                <input
+                  className="field-input"
+                  value={adjustModal.note}
+                  onChange={(e) => setAdjustModal({ ...adjustModal, note: e.target.value })}
+                  placeholder="e.g. Warehouse physical count correction"
+                />
+              </div>
+              <button type="submit" className="btn btn-primary">
+                Apply Stock Update &amp; Record Log
               </button>
             </form>
           </div>
