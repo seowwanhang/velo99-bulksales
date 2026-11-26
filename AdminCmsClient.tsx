@@ -413,7 +413,7 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
       <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 20 }}>
         <div className="card" style={{ width: 'min(430px, 100%)', padding: 28 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <strong style={{ fontSize: '1.15rem' }}>Velo99 Admin CMS Login</strong>
+            <strong style={{ fontSize: '1.15rem' }}>Admin CMS Login</strong>
             <Link href="/" className="btn btn-secondary btn-sm">
               &larr; Storefront
             </Link>

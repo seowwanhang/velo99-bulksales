@@ -1,9 +1,22 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { formatRM } from '@/lib/rules';
 import { PrintButton } from '@/components/PrintButton';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata(props: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await props.params;
+  try {
+    const settings = await prisma.siteSettings.findUnique({ where: { id: 'main' } });
+    return { title: `Invoice ${id} — ${settings?.brandName || 'Wholesale Invoice'}` };
+  } catch {
+    return { title: `Invoice ${id}` };
+  }
+}
 
 export default async function InvoicePage(props: {
   params: Promise<{ id: string }>;
