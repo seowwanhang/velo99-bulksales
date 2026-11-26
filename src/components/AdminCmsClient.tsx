@@ -61,6 +61,11 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
   const [adjustModal, setAdjustModal] = useState<any | null>(null);
   const [logSearch, setLogSearch] = useState('');
   const [logTypeFilter, setLogTypeFilter] = useState('all');
+  const [editingOrder, setEditingOrder] = useState<any | null>(null);
+  const [deletingOrder, setDeletingOrder] = useState<any | null>(null);
+  const [restoreStockOnDelete, setRestoreStockOnDelete] = useState(false);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
 
   const toast = useCallback((msg: string, kind: 'info' | 'success' | 'error' = 'info') => {
     const id = Date.now() + Math.random();
@@ -321,6 +326,59 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
     if (res.ok) {
       toast(`Order status updated to ${status}`, 'success');
       loadAll();
+    }
+  }
+
+  async function saveOrderEdits(e: React.FormEvent) {
+    e.preventDefault();
+    const res = await fetch(`/api/orders/${editingOrder.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: editingOrder.status,
+        customerName: editingOrder.customerName,
+        customerPhone: editingOrder.customerPhone,
+        customerEmail: editingOrder.customerEmail,
+        deliveryAddress: editingOrder.deliveryAddress,
+        postcode: editingOrder.postcode,
+        fulfillment: editingOrder.fulfillment,
+        paymentMethod: editingOrder.paymentMethod,
+        requestEInvoice: editingOrder.requestEInvoice,
+        eInvoiceCompany: editingOrder.eInvoiceCompany,
+        eInvoiceTin: editingOrder.eInvoiceTin,
+        discountRate: Number(editingOrder.discountPct || 0) / 100,
+        shippingFee: Number(editingOrder.shippingFee || 0),
+        totalCost: Number(editingOrder.totalCost || 0),
+        notes: editingOrder.notes || '',
+      }),
+    });
+    if (res.ok) {
+      setEditingOrder(null);
+      toast('Order & profit figures updated!', 'success');
+      loadAll();
+    } else {
+      toast((await res.json()).error || 'Failed to update order.', 'error');
+    }
+  }
+
+  async function confirmDeleteOrder() {
+    if (!deletingOrder) return;
+    const res = await fetch(
+      `/api/orders/${deletingOrder.id}?restoreStock=${restoreStockOnDelete ? 'true' : 'false'}`,
+      { method: 'DELETE' }
+    );
+    if (res.ok) {
+      toast(
+        restoreStockOnDelete
+          ? `Order ${deletingOrder.orderNumber} deleted & stock restored.`
+          : `Order ${deletingOrder.orderNumber} deleted.`,
+        'info'
+      );
+      setDeletingOrder(null);
+      setRestoreStockOnDelete(false);
+      loadAll();
+    } else {
+      toast('Failed to delete order.', 'error');
     }
   }
 
@@ -987,7 +1045,67 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
           {/* ========== TAB 4: ORDERS & PROFIT LEDGER ========== */}
           {tab === 'orders' && (
             <div style={{ display: 'grid', gap: 16 }}>
-              <h1 style={{ margin: 0, fontSize: '1.4rem' }}>Orders, Fulfillment &amp; Profit Ledger</h1>
+              <div className="section-head" style={{ marginBottom: 0 }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '1.4rem' }}>Orders, Fulfillment &amp; Profit Ledger</h1>
+                  <p>Edit order discounts, shipping, COGS, e-Invoice details, or delete sample/test orders.</p>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                  background: 'var(--surface)',
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <input
+                  type="search"
+                  className="field-input"
+                  style={{ flex: '1 1 240px' }}
+                  placeholder="Search Order ID, buyer/company name, phone, region, or TIN..."
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                />
+                <select
+                  className="field-select"
+                  style={{ width: 185 }}
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                >
+                  <option value="all">All Order Statuses</option>
+                  {[
+                    'CONFIRMED',
+                    'PACKING',
+                    'READY_FOR_PICKUP',
+                    'OUT_FOR_DELIVERY',
+                    'COMPLETED',
+                    'RESCHEDULED',
+                    'CANCELLED',
+                  ].map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+                {(orderSearch || orderStatusFilter !== 'all') && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setOrderSearch('');
+                      setOrderStatusFilter('all');
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
               <div className="table-wrap">
                 <table className="data-table">
                   <thead>
@@ -999,79 +1117,125 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                       <th>COGS</th>
                       <th>Net Profit</th>
                       <th>Status</th>
-                      <th>Invoice</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((o) => (
-                      <tr key={o.id}>
-                        <td>
-                          <strong className="mono">{o.orderNumber}</strong>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--ink-muted)' }}>
-                            {new Date(o.createdAt).toLocaleString('en-MY')}
-                          </div>
-                        </td>
-                        <td>
-                          <strong>{o.customerName}</strong>
-                          <div style={{ fontSize: '0.74rem', color: 'var(--ink-muted)' }}>
-                            {o.dealerTier.toUpperCase()} ({Math.round(o.discountRate * 100)}% OFF) &bull;{' '}
-                            {o.fulfillment}
-                          </div>
-                        </td>
-                        <td className="mono">
-                          {o.totalBikes} bikes
-                          <br />
-                          {Number(o.totalCbm).toFixed(2)} m&sup3;
-                        </td>
-                        <td className="mono">
-                          <strong>{formatRM(o.goodsRevenue)}</strong>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--ink-muted)' }}>
-                            Ship: {formatRM(o.shippingFee)}
-                          </div>
-                        </td>
-                        <td className="mono">{formatRM(o.totalCost)}</td>
-                        <td
-                          className="mono"
-                          style={{
-                            color: o.netProfit >= 0 ? 'var(--success)' : 'var(--error)',
-                            fontWeight: 800,
-                          }}
-                        >
-                          {formatRM(o.netProfit)}
-                          <div style={{ fontSize: '0.72rem' }}>{o.profitMargin}%</div>
-                        </td>
-                        <td>
-                          <select
-                            className="field-select"
-                            style={{ width: 155, padding: '5px 8px', fontSize: '0.78rem' }}
-                            value={o.status}
-                            onChange={(e) => updateOrderStatus(o.id, e.target.value)}
+                    {orders
+                      .filter((o) => {
+                        if (orderStatusFilter !== 'all' && o.status !== orderStatusFilter)
+                          return false;
+                        const q = orderSearch.trim().toLowerCase();
+                        if (
+                          q &&
+                          !`${o.orderNumber} ${o.customerName} ${o.customerPhone} ${o.regionName} ${o.eInvoiceTin || ''}`
+                            .toLowerCase()
+                            .includes(q)
+                        ) {
+                          return false;
+                        }
+                        return true;
+                      })
+                      .map((o) => (
+                        <tr key={o.id}>
+                          <td>
+                            <strong className="mono">{o.orderNumber}</strong>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--ink-muted)' }}>
+                              {new Date(o.createdAt).toLocaleString('en-MY')}
+                            </div>
+                          </td>
+                          <td>
+                            <strong>{o.customerName}</strong>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--ink-muted)' }}>
+                              {o.dealerTier.toUpperCase()} ({Math.round(o.discountRate * 100)}% OFF) &bull;{' '}
+                              {o.fulfillment}
+                            </div>
+                          </td>
+                          <td className="mono">
+                            {o.totalBikes} bikes
+                            <br />
+                            {Number(o.totalCbm).toFixed(2)} m&sup3;
+                          </td>
+                          <td className="mono">
+                            <strong>{formatRM(o.goodsRevenue)}</strong>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--ink-muted)' }}>
+                              Ship: {formatRM(o.shippingFee)}
+                            </div>
+                          </td>
+                          <td className="mono">{formatRM(o.totalCost)}</td>
+                          <td
+                            className="mono"
+                            style={{
+                              color: o.netProfit >= 0 ? 'var(--success)' : 'var(--error)',
+                              fontWeight: 800,
+                            }}
                           >
-                            {[
-                              'CONFIRMED',
-                              'PACKING',
-                              'READY_FOR_PICKUP',
-                              'OUT_FOR_DELIVERY',
-                              'COMPLETED',
-                              'RESCHEDULED',
-                              'CANCELLED',
-                            ].map((st) => (
-                              <option key={st} value={st}>
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <Link
-                            href={`/invoice/${o.orderNumber}`}
-                            className="btn btn-secondary btn-sm"
-                          >
-                            Invoice
-                          </Link>
+                            {formatRM(o.netProfit)}
+                            <div style={{ fontSize: '0.72rem' }}>{o.profitMargin}%</div>
+                          </td>
+                          <td>
+                            <select
+                              className="field-select"
+                              style={{ width: 145, padding: '5px 8px', fontSize: '0.76rem' }}
+                              value={o.status}
+                              onChange={(e) => updateOrderStatus(o.id, e.target.value)}
+                            >
+                              {[
+                                'CONFIRMED',
+                                'PACKING',
+                                'READY_FOR_PICKUP',
+                                'OUT_FOR_DELIVERY',
+                                'COMPLETED',
+                                'RESCHEDULED',
+                                'CANCELLED',
+                              ].map((st) => (
+                                <option key={st} value={st}>
+                                  {st}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <Link
+                                href={`/invoice/${o.orderNumber}`}
+                                className="btn btn-secondary btn-sm"
+                              >
+                                Invoice
+                              </Link>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() =>
+                                  setEditingOrder({
+                                    ...o,
+                                    discountPct: Number((o.discountRate * 100).toFixed(1)),
+                                  })
+                                }
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={() => {
+                                  setDeletingOrder(o);
+                                  setRestoreStockOnDelete(false);
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {orders.length === 0 && (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: 'center', color: 'var(--ink-muted)' }}>
+                          No wholesale orders yet.
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2815,6 +2979,317 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                 Apply Stock Update &amp; Record Log
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== EDIT ORDER & PROFIT MODAL ==================== */}
+      {editingOrder && (() => {
+        const discRate = Math.max(0, Math.min(Number(editingOrder.discountPct || 0) / 100, 0.25));
+        const ship = Math.max(0, Number(editingOrder.shippingFee || 0));
+        const cogs = Math.max(0, Number(editingOrder.totalCost || 0));
+        const discAmt = Number((editingOrder.subtotal * discRate).toFixed(2));
+        const rev = Number((editingOrder.subtotal - discAmt).toFixed(2));
+        const total = Number((rev + ship).toFixed(2));
+        const profit = Number((rev - cogs - ship).toFixed(2));
+        const margin = rev > 0 ? Number(((profit / rev) * 100).toFixed(1)) : 0;
+
+        return (
+          <div className="backdrop" onClick={() => setEditingOrder(null)}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-head">
+                <h3 style={{ margin: 0 }}>Edit Order &amp; Profit &mdash; {editingOrder.orderNumber}</h3>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setEditingOrder(null)}
+                >
+                  &times;
+                </button>
+              </div>
+              <form className="panel-body" onSubmit={saveOrderEdits} style={{ display: 'grid', gap: 11 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="field-group">
+                    <label className="field-label">Buyer / Company Name</label>
+                    <input
+                      required
+                      className="field-input"
+                      value={editingOrder.customerName}
+                      onChange={(e) =>
+                        setEditingOrder({ ...editingOrder, customerName: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Phone</label>
+                    <input
+                      className="field-input"
+                      value={editingOrder.customerPhone}
+                      onChange={(e) =>
+                        setEditingOrder({ ...editingOrder, customerPhone: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="field-group">
+                    <label className="field-label">Fulfillment Status</label>
+                    <select
+                      className="field-select"
+                      value={editingOrder.status}
+                      onChange={(e) => setEditingOrder({ ...editingOrder, status: e.target.value })}
+                    >
+                      {[
+                        'CONFIRMED',
+                        'PACKING',
+                        'READY_FOR_PICKUP',
+                        'OUT_FOR_DELIVERY',
+                        'COMPLETED',
+                        'RESCHEDULED',
+                        'CANCELLED',
+                      ].map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Payment Method</label>
+                    <select
+                      className="field-select"
+                      value={editingOrder.paymentMethod}
+                      onChange={(e) =>
+                        setEditingOrder({ ...editingOrder, paymentMethod: e.target.value })
+                      }
+                    >
+                      <option value="bank_transfer">Bank Transfer / DuitNow QR</option>
+                      <option value="credit_terms">Dealer Credit Terms (Net 30)</option>
+                      <option value="pay_at_hub">Pay Upon Hub Self-Pickup</option>
+                      <option value="fpx">FPX Online Banking</option>
+                      <option value="card">Card</option>
+                      <option value="instalment_3m">0% 3-Month SME Instalment</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+                  <div className="field-group">
+                    <label className="field-label">Delivery Address</label>
+                    <input
+                      className="field-input"
+                      value={editingOrder.deliveryAddress || ''}
+                      onChange={(e) =>
+                        setEditingOrder({ ...editingOrder, deliveryAddress: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Postcode</label>
+                    <input
+                      className="field-input mono"
+                      value={editingOrder.postcode || ''}
+                      onChange={(e) =>
+                        setEditingOrder({ ...editingOrder, postcode: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                  <div className="field-group">
+                    <label className="field-label">Admin Discount % (0–25%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={25}
+                      step={0.5}
+                      className="field-input mono"
+                      value={editingOrder.discountPct}
+                      onChange={(e) =>
+                        setEditingOrder({ ...editingOrder, discountPct: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Shipping Fee (RM)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="field-input mono"
+                      value={editingOrder.shippingFee}
+                      onChange={(e) =>
+                        setEditingOrder({ ...editingOrder, shippingFee: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Total COGS (RM)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="field-input mono"
+                      value={editingOrder.totalCost}
+                      onChange={(e) =>
+                        setEditingOrder({ ...editingOrder, totalCost: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="field-group">
+                    <label className="field-label">LHDN e-Invoice Company</label>
+                    <input
+                      className="field-input"
+                      value={editingOrder.eInvoiceCompany || ''}
+                      onChange={(e) =>
+                        setEditingOrder({
+                          ...editingOrder,
+                          eInvoiceCompany: e.target.value,
+                          requestEInvoice: Boolean(e.target.value || editingOrder.eInvoiceTin),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">LHDN TIN</label>
+                    <input
+                      className="field-input mono"
+                      value={editingOrder.eInvoiceTin || ''}
+                      onChange={(e) =>
+                        setEditingOrder({
+                          ...editingOrder,
+                          eInvoiceTin: e.target.value,
+                          requestEInvoice: Boolean(e.target.value || editingOrder.eInvoiceCompany),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="field-group">
+                  <label className="field-label">Internal Order Notes</label>
+                  <textarea
+                    rows={2}
+                    className="field-textarea"
+                    value={editingOrder.notes || ''}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, notes: e.target.value })}
+                    placeholder="e.g. Verified bank slip received on WhatsApp"
+                  />
+                </div>
+
+                <div
+                  style={{
+                    background: '#15181e',
+                    color: '#f1f5f9',
+                    padding: 12,
+                    borderRadius: 10,
+                    fontSize: '0.8rem',
+                    display: 'grid',
+                    gap: 4,
+                  }}
+                >
+                  <strong style={{ color: '#fde68a' }}>LIVE RECALCULATED PROFIT PREVIEW</strong>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Subtotal &minus; Discount ({Math.round(discRate * 100)}%):</span>
+                    <span className="mono">
+                      {formatRM(editingOrder.subtotal)} &minus; {formatRM(discAmt)} ={' '}
+                      <strong>{formatRM(rev)}</strong>
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Total Receivable (incl. Shipping):</span>
+                    <span className="mono">
+                      <strong>{formatRM(total)}</strong>
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Net Profit (Revenue &minus; COGS &minus; Ship):</span>
+                    <span
+                      className="mono"
+                      style={{ color: profit >= 0 ? '#4ade80' : '#f87171', fontWeight: 800 }}
+                    >
+                      {formatRM(profit)} ({margin}%)
+                    </span>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn btn-primary">
+                  Save Order &amp; Profit Changes
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ==================== DELETE ORDER CONFIRMATION MODAL ==================== */}
+      {deletingOrder && (
+        <div className="backdrop" onClick={() => setDeletingOrder(null)}>
+          <div className="modal-card" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="panel-head">
+              <h3 style={{ margin: 0, color: 'var(--error)' }}>
+                Delete Order {deletingOrder.orderNumber}?
+              </h3>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setDeletingOrder(null)}
+              >
+                &times;
+              </button>
+            </div>
+            <div className="panel-body" style={{ display: 'grid', gap: 12, fontSize: '0.86rem' }}>
+              <p style={{ margin: 0 }}>
+                Buyer: <strong>{deletingOrder.customerName}</strong> &bull; Total:{' '}
+                <strong className="mono">{formatRM(deletingOrder.totalAmount)}</strong>
+              </p>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  padding: 10,
+                  borderRadius: 8,
+                  background: 'var(--bg)',
+                  border: '1px solid var(--border)',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={restoreStockOnDelete}
+                  onChange={(e) => setRestoreStockOnDelete(e.target.checked)}
+                  style={{ marginTop: 2 }}
+                />
+                <span>
+                  <strong>Restore ordered cartons back to warehouse stock</strong> (check this if
+                  cancelling a real order; leave unchecked if simply deleting a seeded sample order).
+                </span>
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ flex: 1 }}
+                  onClick={confirmDeleteOrder}
+                >
+                  Confirm Delete Order
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setDeletingOrder(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
