@@ -863,9 +863,6 @@ export function StorefrontClient({
                     <a href={currentBanner.ctaHref} className="btn btn-primary">
                       {currentBanner.ctaLabel}
                     </a>
-                    <a href="#dealer-tiers" className="btn btn-secondary">
-                      View Dealer Tier Discounts
-                    </a>
                   </div>
                   {banners.length > 1 && (
                     <div className="carousel-dots" aria-label="Banner slides">
@@ -1309,55 +1306,6 @@ export function StorefrontClient({
                   </article>
                 );
               })}
-            </div>
-          </div>
-        </section>
-
-        {/* Dealer Tiers */}
-        <section id="dealer-tiers" className="section">
-          <div className="container">
-            <div className="section-head">
-              <div>
-                <h2>Dealer Tier &amp; Volume Bonus Program</h2>
-                <p>
-                  Discounts apply automatically when signed in, and stack with volume bonuses up to
-                  20% OFF.
-                </p>
-              </div>
-            </div>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Dealer Tier</th>
-                    <th>Base Discount</th>
-                    <th>10+ Bikes (+2% Bonus)</th>
-                    <th>20+ Bikes (+3% Bonus)</th>
-                    <th>Default Credit Limit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.values(DEALER_TIERS).map((tier) => (
-                    <tr key={tier.id}>
-                      <td>
-                        <span className={`tier-pill ${tier.id}`}>{tier.label}</span>
-                      </td>
-                      <td className="mono">
-                        <strong>{Math.round(tier.discountRate * 100)}% OFF</strong>
-                      </td>
-                      <td className="mono">
-                        {Math.round(Math.min(tier.discountRate + 0.02, 0.2) * 100)}% OFF
-                      </td>
-                      <td className="mono">
-                        <strong>
-                          {Math.round(Math.min(tier.discountRate + 0.03, 0.2) * 100)}% OFF
-                        </strong>
-                      </td>
-                      <td className="mono">{formatRM(tier.defaultCreditLimit)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
         </section>
