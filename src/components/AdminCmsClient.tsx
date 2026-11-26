@@ -66,6 +66,9 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
   const [restoreStockOnDelete, setRestoreStockOnDelete] = useState(false);
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+  const [dealerSearch, setDealerSearch] = useState('');
+  const [dealerTierFilter, setDealerTierFilter] = useState('all');
+  const [dealerRoleFilter, setDealerRoleFilter] = useState('all');
 
   const toast = useCallback((msg: string, kind: 'info' | 'success' | 'error' = 'info') => {
     const id = Date.now() + Math.random();
@@ -462,6 +465,22 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
       loadAll();
     } else {
       toast((await res.json()).error || 'Failed to save account', 'error');
+    }
+  }
+
+  async function deleteDealer(d: any) {
+    if (
+      !confirm(
+        `Delete account "${d.companyName || d.name}" (${d.email})?\n\nPast order invoices will remain intact in your Orders & Profit ledger.`
+      )
+    )
+      return;
+    const res = await fetch(`/api/admin/dealers?id=${d.id}`, { method: 'DELETE' });
+    if (res.ok) {
+      toast(`Account ${d.email} deleted.`, 'info');
+      loadAll();
+    } else {
+      toast((await res.json()).error || 'Failed to delete account.', 'error');
     }
   }
 
@@ -1491,7 +1510,7 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
               <div className="section-head" style={{ marginBottom: 0 }}>
                 <div>
                   <h1 style={{ margin: 0, fontSize: '1.4rem' }}>Dealers, Tiers &amp; Credit Limits</h1>
-                  <p>Approve B2B dealers, upgrade Platinum/Gold/Silver tiers, and manage credit.</p>
+                  <p>Approve B2B dealers, upgrade Platinum/Gold/Silver tiers, edit contact details, or remove sample accounts.</p>
                 </div>
                 <button
                   type="button"
@@ -1514,6 +1533,64 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                   + Create Dealer / Staff Account
                 </button>
               </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                  background: 'var(--surface)',
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <input
+                  type="search"
+                  className="field-input"
+                  style={{ flex: '1 1 240px' }}
+                  placeholder="Search company, contact name, email, or phone..."
+                  value={dealerSearch}
+                  onChange={(e) => setDealerSearch(e.target.value)}
+                />
+                <select
+                  className="field-select"
+                  style={{ width: 170 }}
+                  value={dealerTierFilter}
+                  onChange={(e) => setDealerTierFilter(e.target.value)}
+                >
+                  <option value="all">All Discount Tiers</option>
+                  <option value="platinum">Platinum (15%)</option>
+                  <option value="gold">Gold (10%)</option>
+                  <option value="silver">Silver (5%)</option>
+                  <option value="standard">Standard (0%)</option>
+                </select>
+                <select
+                  className="field-select"
+                  style={{ width: 150 }}
+                  value={dealerRoleFilter}
+                  onChange={(e) => setDealerRoleFilter(e.target.value)}
+                >
+                  <option value="all">All Roles</option>
+                  <option value="dealer">Dealer</option>
+                  <option value="sales">Sales Rep</option>
+                  <option value="admin">Admin</option>
+                </select>
+                {(dealerSearch || dealerTierFilter !== 'all' || dealerRoleFilter !== 'all') && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setDealerSearch('');
+                      setDealerTierFilter('all');
+                      setDealerRoleFilter('all');
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
               <div className="table-wrap">
                 <table className="data-table">
                   <thead>
@@ -1524,38 +1601,83 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                       <th>Credit Used / Limit</th>
                       <th>Orders</th>
                       <th>Status</th>
-                      <th>Action</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {dealers.map((d) => (
-                      <tr key={d.id}>
-                        <td>
-                          <strong>{d.companyName || d.name}</strong>
-                          <div style={{ fontSize: '0.74rem', color: 'var(--ink-muted)' }}>
-                            {d.name} &bull; {d.email} &bull; {d.phone}
-                          </div>
-                        </td>
-                        <td className="mono">{d.role.toUpperCase()}</td>
-                        <td>
-                          <span className={`tier-pill ${d.tier}`}>{d.tier.toUpperCase()}</span>
-                        </td>
-                        <td className="mono">
-                          {formatRM(d.creditUsed)} / <strong>{formatRM(d.creditLimit)}</strong>
-                        </td>
-                        <td className="mono">{d._count?.orders ?? 0}</td>
-                        <td>{d.active ? 'Active' : 'Suspended'}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => setEditingDealer({ ...d, newPassword: '' })}
-                          >
-                            Edit
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {dealers
+                      .filter((d) => {
+                        if (dealerTierFilter !== 'all' && d.tier !== dealerTierFilter) return false;
+                        if (dealerRoleFilter !== 'all' && d.role !== dealerRoleFilter) return false;
+                        const q = dealerSearch.trim().toLowerCase();
+                        if (
+                          q &&
+                          !`${d.companyName || ''} ${d.name || ''} ${d.email || ''} ${d.phone || ''}`
+                            .toLowerCase()
+                            .includes(q)
+                        ) {
+                          return false;
+                        }
+                        return true;
+                      })
+                      .map((d) => {
+                        const isSelf = d.id === user?.id;
+                        return (
+                          <tr key={d.id}>
+                            <td>
+                              <strong>{d.companyName || d.name}</strong>
+                              {isSelf && (
+                                <span
+                                  style={{
+                                    marginLeft: 6,
+                                    fontSize: '0.68rem',
+                                    background: 'var(--primary-soft)',
+                                    color: 'var(--primary)',
+                                    padding: '1px 6px',
+                                    borderRadius: 4,
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  YOU
+                                </span>
+                              )}
+                              <div style={{ fontSize: '0.74rem', color: 'var(--ink-muted)' }}>
+                                {d.name} &bull; {d.email}
+                                {d.phone ? ` • ${d.phone}` : ''}
+                              </div>
+                            </td>
+                            <td className="mono">{d.role.toUpperCase()}</td>
+                            <td>
+                              <span className={`tier-pill ${d.tier}`}>{d.tier.toUpperCase()}</span>
+                            </td>
+                            <td className="mono">
+                              {formatRM(d.creditUsed)} / <strong>{formatRM(d.creditLimit)}</strong>
+                            </td>
+                            <td className="mono">{d._count?.orders ?? 0}</td>
+                            <td>{d.active ? 'Active' : 'Suspended'}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => setEditingDealer({ ...d, newPassword: '' })}
+                                >
+                                  Edit
+                                </button>
+                                {!isSelf && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-danger btn-sm"
+                                    onClick={() => deleteDealer(d)}
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>
@@ -2685,18 +2807,27 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
               </button>
             </div>
             <form className="panel-body" onSubmit={saveDealer} style={{ display: 'grid', gap: 11 }}>
-              {!editingDealer.id && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div className="field-group">
                   <label className="field-label">Email *</label>
                   <input
                     required
                     type="email"
                     className="field-input"
-                    value={editingDealer.email}
+                    value={editingDealer.email || ''}
                     onChange={(e) => setEditingDealer({ ...editingDealer, email: e.target.value })}
                   />
                 </div>
-              )}
+                <div className="field-group">
+                  <label className="field-label">Phone / WhatsApp</label>
+                  <input
+                    className="field-input"
+                    value={editingDealer.phone || ''}
+                    onChange={(e) => setEditingDealer({ ...editingDealer, phone: e.target.value })}
+                    placeholder="+60 12-345 6789"
+                  />
+                </div>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div className="field-group">
                   <label className="field-label">Contact Name *</label>
