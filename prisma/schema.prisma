@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 model SiteSettings {
@@ -29,6 +30,12 @@ model SiteSettings {
   duitNowQrUrl        String   @default("")
   whatsappOrderNumber String   @default("601116000099")
   notifyEmail         String   @default("bulksales@velo99.my")
+  platinumDiscountPct Float    @default(15)
+  goldDiscountPct     Float    @default(10)
+  silverDiscountPct   Float    @default(5)
+  standardDiscountPct Float    @default(0)
+  volumeBonus10Pct    Float    @default(2)
+  volumeBonus20Pct    Float    @default(3)
   updatedAt           DateTime @updatedAt
 }
 

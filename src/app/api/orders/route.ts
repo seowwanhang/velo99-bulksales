@@ -104,6 +104,12 @@ export async function POST(req: Request) {
       minOrderValue: 500,
       freeDeliveryCbm: 0.5,
       standardShippingFee: 80,
+      platinumDiscountPct: 15,
+      goldDiscountPct: 10,
+      silverDiscountPct: 5,
+      standardDiscountPct: 0,
+      volumeBonus10Pct: 2,
+      volumeBonus20Pct: 3,
     };
 
     // Fetch latest products from DB
@@ -163,6 +169,12 @@ export async function POST(req: Request) {
         minOrderValue: settings.minOrderValue,
         freeDeliveryCbm: settings.freeDeliveryCbm,
         standardShippingFee: settings.standardShippingFee,
+        platinumDiscountPct: settings.platinumDiscountPct,
+        goldDiscountPct: settings.goldDiscountPct,
+        silverDiscountPct: settings.silverDiscountPct,
+        standardDiscountPct: settings.standardDiscountPct,
+        volumeBonus10Pct: settings.volumeBonus10Pct,
+        volumeBonus20Pct: settings.volumeBonus20Pct,
       },
       adminCustomDiscountRate,
     });

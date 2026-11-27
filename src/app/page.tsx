@@ -71,6 +71,12 @@ export default async function HomePage() {
           duitNowQrUrl: '',
           whatsappOrderNumber: '601116000099',
           notifyEmail: 'bulksales@velo99.my',
+          platinumDiscountPct: 15,
+          goldDiscountPct: 10,
+          silverDiscountPct: 5,
+          standardDiscountPct: 0,
+          volumeBonus10Pct: 2,
+          volumeBonus20Pct: 3,
         }
       }
       banners={banners}

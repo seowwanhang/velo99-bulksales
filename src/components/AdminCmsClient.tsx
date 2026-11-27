@@ -165,6 +165,29 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
     }
   }
 
+  async function saveTierDiscounts(e: React.FormEvent) {
+    e.preventDefault();
+    if (!settings) return;
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platinumDiscountPct: Number(settings.platinumDiscountPct ?? 15),
+        goldDiscountPct: Number(settings.goldDiscountPct ?? 10),
+        silverDiscountPct: Number(settings.silverDiscountPct ?? 5),
+        standardDiscountPct: Number(settings.standardDiscountPct ?? 0),
+        volumeBonus10Pct: Number(settings.volumeBonus10Pct ?? 2),
+        volumeBonus20Pct: Number(settings.volumeBonus20Pct ?? 3),
+      }),
+    });
+    if (res.ok) {
+      toast('Tier discount percentages saved live!', 'success');
+      loadAll();
+    } else {
+      toast('Failed to save tier discounts.', 'error');
+    }
+  }
+
   async function saveProduct(e: React.FormEvent) {
     e.preventDefault();
     const isNew = !editingProduct.id;
@@ -1534,6 +1557,147 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                 </button>
               </div>
 
+              {settings && (
+                <form
+                  onSubmit={saveTierDiscounts}
+                  className="card"
+                  style={{ padding: 16, display: 'grid', gap: 12 }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 10,
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: '0.96rem' }}>
+                        Tier Discount &amp; Volume Bonus Percentages
+                      </strong>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
+                        Changes apply live to signed-in dealer pricing &amp; checkout (auto-stacked
+                        discount capped at 20%; Admin per-order override capped at 25%).
+                      </div>
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-sm">
+                      Save Tier Discounts
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                      gap: 10,
+                    }}
+                  >
+                    <div className="field-group">
+                      <label className="field-label">Platinum (% OFF)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={20}
+                        step={0.5}
+                        className="field-input mono"
+                        value={settings.platinumDiscountPct ?? 15}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            platinumDiscountPct: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Gold (% OFF)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={20}
+                        step={0.5}
+                        className="field-input mono"
+                        value={settings.goldDiscountPct ?? 10}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            goldDiscountPct: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Silver (% OFF)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={20}
+                        step={0.5}
+                        className="field-input mono"
+                        value={settings.silverDiscountPct ?? 5}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            silverDiscountPct: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Standard (% OFF)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={20}
+                        step={0.5}
+                        className="field-input mono"
+                        value={settings.standardDiscountPct ?? 0}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            standardDiscountPct: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">10+ Bikes Bonus (%)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={10}
+                        step={0.5}
+                        className="field-input mono"
+                        value={settings.volumeBonus10Pct ?? 2}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            volumeBonus10Pct: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">20+ Bikes Bonus (%)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={10}
+                        step={0.5}
+                        className="field-input mono"
+                        value={settings.volumeBonus20Pct ?? 3}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            volumeBonus20Pct: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </form>
+              )}
+
               <div
                 style={{
                   display: 'flex',
@@ -1560,10 +1724,10 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                   onChange={(e) => setDealerTierFilter(e.target.value)}
                 >
                   <option value="all">All Discount Tiers</option>
-                  <option value="platinum">Platinum (15%)</option>
-                  <option value="gold">Gold (10%)</option>
-                  <option value="silver">Silver (5%)</option>
-                  <option value="standard">Standard (0%)</option>
+                  <option value="platinum">Platinum ({settings?.platinumDiscountPct ?? 15}%)</option>
+                  <option value="gold">Gold ({settings?.goldDiscountPct ?? 10}%)</option>
+                  <option value="silver">Silver ({settings?.silverDiscountPct ?? 5}%)</option>
+                  <option value="standard">Standard ({settings?.standardDiscountPct ?? 0}%)</option>
                 </select>
                 <select
                   className="field-select"
@@ -2869,10 +3033,10 @@ export function AdminCmsClient({ initialUser }: { initialUser: SessionUser | nul
                     value={editingDealer.tier}
                     onChange={(e) => setEditingDealer({ ...editingDealer, tier: e.target.value })}
                   >
-                    <option value="platinum">Platinum (15% OFF)</option>
-                    <option value="gold">Gold (10% OFF)</option>
-                    <option value="silver">Silver (5% OFF)</option>
-                    <option value="standard">Standard (0% OFF)</option>
+                    <option value="platinum">Platinum ({settings?.platinumDiscountPct ?? 15}% OFF)</option>
+                    <option value="gold">Gold ({settings?.goldDiscountPct ?? 10}% OFF)</option>
+                    <option value="silver">Silver ({settings?.silverDiscountPct ?? 5}% OFF)</option>
+                    <option value="standard">Standard ({settings?.standardDiscountPct ?? 0}% OFF)</option>
                   </select>
                 </div>
               </div>

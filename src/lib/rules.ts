@@ -43,10 +43,45 @@ export interface OrderCalcLine {
   cbm: number;
 }
 
-export interface ThresholdSettings {
+export interface TierDiscountSettings {
+  platinumDiscountPct?: number | null;
+  goldDiscountPct?: number | null;
+  silverDiscountPct?: number | null;
+  standardDiscountPct?: number | null;
+  volumeBonus10Pct?: number | null;
+  volumeBonus20Pct?: number | null;
+}
+
+export interface ThresholdSettings extends TierDiscountSettings {
   minOrderValue: number;
   freeDeliveryCbm: number;
   standardShippingFee: number;
+}
+
+function clampRate(pct: number | null | undefined, fallbackRate: number, maxRate: number): number {
+  if (pct === undefined || pct === null || Number.isNaN(Number(pct))) return fallbackRate;
+  return Math.max(0, Math.min(Number(pct) / 100, maxRate));
+}
+
+export function getResolvedDealerTiers(settings?: TierDiscountSettings) {
+  return {
+    platinum: {
+      ...DEALER_TIERS.platinum,
+      discountRate: clampRate(settings?.platinumDiscountPct, DEALER_TIERS.platinum.discountRate, MAX_AUTO_DISCOUNT),
+    },
+    gold: {
+      ...DEALER_TIERS.gold,
+      discountRate: clampRate(settings?.goldDiscountPct, DEALER_TIERS.gold.discountRate, MAX_AUTO_DISCOUNT),
+    },
+    silver: {
+      ...DEALER_TIERS.silver,
+      discountRate: clampRate(settings?.silverDiscountPct, DEALER_TIERS.silver.discountRate, MAX_AUTO_DISCOUNT),
+    },
+    standard: {
+      ...DEALER_TIERS.standard,
+      discountRate: clampRate(settings?.standardDiscountPct, DEALER_TIERS.standard.discountRate, MAX_AUTO_DISCOUNT),
+    },
+  };
 }
 
 export function calculateOrderFinancials(params: {
@@ -56,7 +91,8 @@ export function calculateOrderFinancials(params: {
   settings: ThresholdSettings;
   adminCustomDiscountRate?: number | null;
 }) {
-  const tier = DEALER_TIERS[(params.tierId as DealerTierId) || 'standard'] ?? DEALER_TIERS.standard;
+  const resolvedTiers = getResolvedDealerTiers(params.settings);
+  const tier = resolvedTiers[(params.tierId as DealerTierId) || 'standard'] ?? resolvedTiers.standard;
   const totalBikes = params.items.reduce(
     (sum, i) => sum + (i.isBicycle ? i.unitsPerCarton * i.qty : 0),
     0
@@ -66,10 +102,12 @@ export function calculateOrderFinancials(params: {
     params.items.reduce((sum, i) => sum + i.cbm * i.qty, 0).toFixed(2)
   );
 
-  // Volume Bonus: >=20 bikes => +3%, >=10 bikes => +2%, auto cap 20%
+  // Volume Bonus: >=20 bikes => default +3%, >=10 bikes => default +2%, auto cap 20%
+  const bonus10 = clampRate(params.settings.volumeBonus10Pct, 0.02, 0.10);
+  const bonus20 = clampRate(params.settings.volumeBonus20Pct, 0.03, 0.10);
   let volumeBonus = 0;
-  if (totalBikes >= 20) volumeBonus = 0.03;
-  else if (totalBikes >= 10) volumeBonus = 0.02;
+  if (totalBikes >= 20) volumeBonus = bonus20;
+  else if (totalBikes >= 10) volumeBonus = bonus10;
 
   const autoDiscountRate = Math.min(tier.discountRate + volumeBonus, MAX_AUTO_DISCOUNT);
   const discountRate =

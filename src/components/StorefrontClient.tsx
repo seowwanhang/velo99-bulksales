@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   calculateOrderFinancials,
-  DEALER_TIERS,
   DealerTierId,
   formatRM,
+  getResolvedDealerTiers,
   getStockStatus,
 } from '@/lib/rules';
 
@@ -32,6 +32,12 @@ export interface StoreSettings {
   duitNowQrUrl: string;
   whatsappOrderNumber: string;
   notifyEmail: string;
+  platinumDiscountPct?: number;
+  goldDiscountPct?: number;
+  silverDiscountPct?: number;
+  standardDiscountPct?: number;
+  volumeBonus10Pct?: number;
+  volumeBonus20Pct?: number;
 }
 
 export interface HeroBannerItem {
@@ -227,8 +233,9 @@ export function StorefrontClient({
   }
 
   const isAdmin = user?.role === 'admin';
+  const resolvedTiers = useMemo(() => getResolvedDealerTiers(settings), [settings]);
   const activeTierId = (user?.tier || 'standard') as DealerTierId;
-  const activeTier = DEALER_TIERS[activeTierId] ?? DEALER_TIERS.standard;
+  const activeTier = resolvedTiers[activeTierId] ?? resolvedTiers.standard;
   const activeRegion = regions.find((r) => r.id === selectedRegionId) ?? regions[0] ?? null;
 
   const cartLines = useMemo(() => {
@@ -257,6 +264,12 @@ export function StorefrontClient({
         minOrderValue: settings.minOrderValue,
         freeDeliveryCbm: settings.freeDeliveryCbm,
         standardShippingFee: settings.standardShippingFee,
+        platinumDiscountPct: settings.platinumDiscountPct,
+        goldDiscountPct: settings.goldDiscountPct,
+        silverDiscountPct: settings.silverDiscountPct,
+        standardDiscountPct: settings.standardDiscountPct,
+        volumeBonus10Pct: settings.volumeBonus10Pct,
+        volumeBonus20Pct: settings.volumeBonus20Pct,
       },
       adminCustomDiscountRate:
         isAdmin && adminCustomDiscountPct !== ''
